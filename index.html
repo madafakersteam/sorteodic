@@ -163,10 +163,10 @@ h2{font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:#fff;margi
   <div id="t-cargar">
     <div class="panel">
       <h2>Nueva carga</h2>
-      <label>Nombre de la persona</label>
-      <input id="fNombre" autocomplete="off" placeholder="Ej: María Pérez">
       <label>Nombre de usuario</label>
       <input id="fUsuario" autocomplete="off" autocapitalize="none" placeholder="Ej: mariaperez23">
+      <label>Nombre de agente</label>
+      <input id="fNombre" autocomplete="off" placeholder="Ej: Lucho">
       <label>Monto de la carga ($)</label>
       <input id="fMonto" inputmode="numeric" autocomplete="off" placeholder="Ej: 12000">
       <div class="hint" id="hintMonto"></div>
@@ -183,7 +183,7 @@ h2{font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:#fff;margi
   <!-- BUSCAR -->
   <div id="t-buscar" class="hidden">
     <div class="panel">
-      <h2>Buscar por nombre, usuario o número</h2>
+      <h2>Buscar por usuario, agente o número</h2>
       <input id="qIn" autocomplete="off" autocapitalize="none" placeholder="Buscar…">
       <button class="btn" id="btnBuscar">BUSCAR</button>
     </div>
@@ -355,7 +355,7 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
 /* ---------- tarjetas ---------- */
 const ICON_SHARE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>';
 function tarjetaHTML(c, conShare, idx, hl) {
-  return '<div class="ticket-wrap"><div class="ticket"><div class="nm">' + esc(c.nombre) + '<span class="us">@' + esc(c.usuario) + '</span></div>' +
+  return '<div class="ticket-wrap"><div class="ticket"><div class="nm">' + esc(c.usuario) + '<span class="us">@' + esc(c.nombre) + '</span></div>' +
     '<div class="meta">' + esc(c.fecha) + ' · ' + esc(c.hora) + ' · $' + fmt(c.monto) + '</div>' +
     '<div class="nums">' + c.numeros.map(n => '<span class="num' + (hl && String(n) === hl ? ' hit' : '') + '">' + n4(n) + '</span>').join('') + '</div></div>' +
     (conShare ? '<button class="share" data-i="' + idx + '" title="Compartir" aria-label="Compartir">' + ICON_SHARE + '</button>' : '') + '</div>';
@@ -412,7 +412,7 @@ $('btnAdd').onclick = async () => {
   if (submitEnCurso) return;
   const nombre = $('fNombre').value.trim(), usuario = $('fUsuario').value.trim();
   const monto = parseInt($('fMonto').value.replace(/\D/g, ''), 10) || 0;
-  if (!nombre || !usuario) return toast('Completá nombre y usuario', true);
+  if (!nombre || !usuario) return toast('Completá el usuario y el nombre de agente', true);
   const n = Math.floor(monto / MONTO_POR_TICKET);
   if (n < 1) return toast('El monto mínimo es $' + fmt(MONTO_POR_TICKET), true);
   if (!ridActual) ridActual = nuevoRid();   // si hay reintento tras un error de red, se reusa y no duplica
@@ -465,7 +465,7 @@ function dibujarTicket(c) {
   const maxW = W - PAD * 2;
 
   // nombre grande: una línea o, si es muy largo, dos
-  const nombre = String(c.nombre);
+  const nombre = String(c.usuario);   // grande y blanco: el usuario
   let sz = 60; m.font = '800 ' + sz + 'px ' + SANS;
   while (m.measureText(nombre).width > maxW && sz > 38) { sz -= 2; m.font = '800 ' + sz + 'px ' + SANS; }
   let lineas = [nombre];
@@ -500,7 +500,7 @@ function dibujarTicket(c) {
   // usuario: chico y rojo, justo arriba de los números
   y += 10 + usz;
   const cuando = '  ·  ' + c.fecha + '  ' + String(c.hora).slice(0, 5);
-  let fz = usz, ut = '@' + c.usuario, wU, wC;
+  let fz = usz, ut = '@' + c.nombre, wU, wC;
   const medir = () => { ctx.font = '700 ' + fz + 'px ' + MONO; wU = ctx.measureText(ut).width; wC = ctx.measureText(cuando).width; };
   medir();
   while (wU + wC > maxW && fz > 15) { fz -= 1; medir(); }
@@ -570,7 +570,7 @@ $('btnSorteoEntrar').onclick = async () => {
 function pintarGanadores(r) {
   ganadores = r.lista || [];
   $('winList').innerHTML = ganadores.length ? ganadores.map(g =>
-    '<div class="win' + (g.tipo === 'suplente' ? ' sup' : '') + '"><span><b>' + esc(g.premio) + '</b><br>' + esc(g.nombre) + ' · @' + esc(g.usuario) + '</span><b>#' + n4(g.numero) + '</b></div>').join('') : '<div class="empty">Todavía no se sorteó nada</div>';
+    '<div class="win' + (g.tipo === 'suplente' ? ' sup' : '') + '"><span><b>' + esc(g.premio) + '</b><br>' + esc(g.usuario) + ' · @' + esc(g.nombre) + '</span><b>#' + n4(g.numero) + '</b></div>').join('') : '<div class="empty">Todavía no se sorteó nada</div>';
   const total = ((CFG && CFG.premios) ? CFG.premios.length : 4) + ((CFG && CFG.suplentes) || 0);
   $('btnSortear').disabled = ganadores.length >= total;
   $('btnSortear').textContent = ganadores.length >= total ? 'SORTEO COMPLETO' : (ganadores.length < ((CFG && CFG.premios) ? CFG.premios.length : 4) ? 'SORTEAR ' + (CFG && CFG.premios ? CFG.premios[ganadores.length].toUpperCase() : 'PREMIO') : 'SORTEAR SUPLENTE');
@@ -591,7 +591,7 @@ $('btnSortear').onclick = async () => {
   try {
     const g = await api({ action: 'sortear', orden }, CLAVE_S);
     if (g.error) { toast(g.error, true); return; }
-    modal('<div class="pr">' + esc(g.premio) + '</div><div class="big">#' + n4(g.numero) + '</div><div class="who">' + esc(g.nombre) + '</div><div class="un">@' + esc(g.usuario) + '</div>');
+    modal('<div class="pr">' + esc(g.premio) + '</div><div class="big">#' + n4(g.numero) + '</div><div class="who">' + esc(g.usuario) + '</div><div class="un">@' + esc(g.nombre) + '</div>');
     const r = await api({ action: 'ganadores' }, CLAVE_S);
     if (!r.error) pintarGanadores(r);
   } catch (e) { toast('Error de conexión, reintentá', true); }
