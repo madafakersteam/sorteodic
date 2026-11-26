@@ -48,6 +48,17 @@ input:focus{outline:none;border-color:var(--red)}
 .ticket .meta{color:var(--gray);font-size:10.5px;margin-top:2px}
 .nums{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .num{background:linear-gradient(180deg,#ee2a44,#a30c20);color:#fff;font-family:'Space Mono',monospace;font-weight:700;padding:3px 7px;border-radius:6px;font-size:13px}
+.extras{display:flex;flex-direction:column;gap:8px;margin:12px 0 4px}
+.xbtn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px;border-radius:12px;border:1.5px solid rgba(245,197,66,.5);background:rgba(245,197,66,.06);color:#fff;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer}
+.xbtn .chk{flex:none;width:26px;height:26px;border-radius:7px;border:2.5px solid #FFD84D;background:transparent;position:relative}
+.xbtn span{flex:1}
+.xbtn small{font-size:11px;color:#ffb3b3;font-weight:700}
+.xbtn.on{background:linear-gradient(180deg,rgba(255,230,128,.3),rgba(245,184,0,.22));border-color:#FFE680;box-shadow:0 0 14px rgba(255,216,77,.45)}
+.xbtn.on .chk{background:#FFD84D}
+.xbtn.on .chk::after{content:'';position:absolute;left:7px;top:2px;width:7px;height:13px;border:solid #3b0a52;border-width:0 3.5px 3.5px 0;transform:rotate(45deg)}
+.xbtn:disabled{opacity:.45;border-style:dashed}
+.xbtn:disabled .chk{border-color:#888}
+.num.ext{background:linear-gradient(180deg,#FFE680,#F5B800);color:#3b0a52;box-shadow:0 0 10px rgba(255,216,77,.7)}
 .num.hit{outline:2px solid var(--gold);outline-offset:1px;box-shadow:0 0 10px rgba(245,197,66,.7)}
 .share{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid rgba(208,16,42,.6);background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;padding:0}
 .share svg{width:18px;height:18px}
@@ -169,6 +180,10 @@ h2{font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:#fff;margi
       <input id="fNombre" autocomplete="off" placeholder="Ej: Lucho">
       <label>Monto de la carga ($)</label>
       <input id="fMonto" inputmode="numeric" autocomplete="off" placeholder="Ej: 12000">
+      <div class="extras">
+        <button type="button" class="xbtn" data-x="nuevo"><i class="chk"></i><span>Usuario nuevo (1 sola vez)</span><small></small></button>
+        <button type="button" class="xbtn" data-x="nosrecomendo"><i class="chk"></i><span>Recomendación (nos recomendó)</span><small></small></button>
+      </div>
       <div class="hint" id="hintMonto"></div>
       <button class="btn" id="btnAdd">GENERAR TICKET</button>
     </div>
@@ -357,7 +372,7 @@ const ICON_SHARE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 function tarjetaHTML(c, conShare, idx, hl) {
   return '<div class="ticket-wrap"><div class="ticket"><div class="nm">' + esc(c.usuario) + '<span class="us">@' + esc(c.nombre) + '</span></div>' +
     '<div class="meta">' + esc(c.fecha) + ' · ' + esc(c.hora) + ' · $' + fmt(c.monto) + '</div>' +
-    '<div class="nums">' + c.numeros.map(n => '<span class="num' + (hl && String(n) === hl ? ' hit' : '') + '">' + n4(n) + '</span>').join('') + '</div></div>' +
+    '<div class="nums">' + c.numeros.map(n => '<span class="num' + ((c.extras || []).indexOf(n) >= 0 ? ' ext' : '') + (hl && String(n) === hl ? ' hit' : '') + '">' + n4(n) + '</span>').join('') + '</div></div>' +
     (conShare ? '<button class="share" data-i="' + idx + '" title="Compartir" aria-label="Compartir">' + ICON_SHARE + '</button>' : '') + '</div>';
 }
 let listaActual = [];
@@ -399,10 +414,40 @@ $('btnBuscar').onclick = async () => {
 $('qIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnBuscar').click(); });
 
 /* ---------- cargar ticket ---------- */
+const EXTRAS = new Set();   // cada uno suma +1 número de regalo: nuevo (una sola vez por usuario), nosrecomendo (todas las veces)
+function pintarExtras() {
+  document.querySelectorAll('.xbtn').forEach(x => x.classList.toggle('on', EXTRAS.has(x.dataset.x)));
+  $('fMonto').dispatchEvent(new Event('input'));
+}
+document.querySelectorAll('.xbtn').forEach(b => b.onclick = () => {
+  if (b.disabled) return;
+  if (EXTRAS.has(b.dataset.x)) EXTRAS.delete(b.dataset.x); else EXTRAS.add(b.dataset.x);
+  pintarExtras();
+});
+function resetExtras() { EXTRAS.clear(); document.querySelectorAll('.xbtn').forEach(x => { x.disabled = false; x.querySelector('small').textContent = ''; }); pintarExtras(); }
+// si ese usuario ya recibió "usuario nuevo", se bloquea (se da una sola vez por usuario)
+let infoSeq = 0;
+async function revisarExtrasUsuario() {
+  const u = $('fUsuario').value.trim(), my = ++infoSeq;
+  let yaNuevo = false;
+  if (u.length >= 2) { try { const r = await api({ action: 'usuarioInfo', usuario: u }); if (my !== infoSeq) return; if (r && !r.error) yaNuevo = !!r.nuevo; } catch (e) {} }
+  if (my !== infoSeq) return;
+  const b = document.querySelector('.xbtn[data-x=nuevo]');
+  b.disabled = yaNuevo; b.querySelector('small').textContent = yaNuevo ? 'YA LO RECIBIÓ' : '';
+  if (yaNuevo) EXTRAS.delete('nuevo');
+  pintarExtras();
+}
+let infoTimer = null;
+$('fUsuario').addEventListener('input', () => { clearTimeout(infoTimer); infoTimer = setTimeout(revisarExtrasUsuario, 350); });
+$('fUsuario').addEventListener('change', revisarExtrasUsuario);
+
 $('fMonto').addEventListener('input', () => {
   const m = parseInt($('fMonto').value.replace(/\D/g, ''), 10) || 0;
   const n = Math.floor(m / MONTO_POR_TICKET);
-  $('hintMonto').textContent = m ? (n >= 1 ? '→ le corresponden ' + n + (n === 1 ? ' número' : ' números') : 'Mínimo $' + fmt(MONTO_POR_TICKET) + ' para recibir un número') : '';
+  const solo = !m && EXTRAS.size === 1 && EXTRAS.has('nosrecomendo');
+  if (solo) { $('hintMonto').textContent = ''; return; }
+  const ex = EXTRAS.size ? ' + ' + EXTRAS.size + (EXTRAS.size === 1 ? ' extra de regalo' : ' extras de regalo') : '';
+  $('hintMonto').textContent = m ? (n >= 1 ? '→ le corresponden ' + n + (n === 1 ? ' número' : ' números') + ex : 'Mínimo $' + fmt(MONTO_POR_TICKET) + ' para recibir un número') : (EXTRAS.size ? 'Falta el monto de la carga' : '');
 });
 
 function nuevoRid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -414,19 +459,20 @@ $('btnAdd').onclick = async () => {
   const monto = parseInt($('fMonto').value.replace(/\D/g, ''), 10) || 0;
   if (!nombre || !usuario) return toast('Completá el usuario y el nombre de agente', true);
   const n = Math.floor(monto / MONTO_POR_TICKET);
-  if (n < 1) return toast('El monto mínimo es $' + fmt(MONTO_POR_TICKET), true);
+  const solo = !monto && EXTRAS.size === 1 && EXTRAS.has('nosrecomendo');   // regalo suelto, sin carga
+  if (!solo && n < 1) return toast('El monto mínimo es $' + fmt(MONTO_POR_TICKET), true);
   if (!ridActual) ridActual = nuevoRid();   // si hay reintento tras un error de red, se reusa y no duplica
   submitEnCurso = true;
   const btn = $('btnAdd');
   btn.disabled = true; btn.textContent = 'GENERANDO…';
   try {
-    const r = await api({ action: 'add', nombre, usuario, monto, rid: ridActual });
+    const r = await api({ action: 'add', nombre, usuario, monto, extra: [...EXTRAS].join(','), rid: ridActual });
     if (r.error) { toast(r.error, true); if (r.error === 'clave') mostrarLogin('Clave incorrecta'); return; }
     ridActual = null;
     ultimoResultado = r;
     $('resultado').innerHTML = tarjetaHTML(r, true, 0);
     $('resultado').querySelector('.share').onclick = () => compartir(ultimoResultado);
-    $('fNombre').value = ''; $('fUsuario').value = ''; $('fMonto').value = ''; $('hintMonto').textContent = '';
+    resetExtras(); $('fNombre').value = ''; $('fUsuario').value = ''; $('fMonto').value = ''; $('hintMonto').textContent = '';
     cargarStats();
     toast('✅ Ticket generado: ' + r.numeros.length + (r.numeros.length === 1 ? ' número' : ' números'));
   } catch (e) {
@@ -515,10 +561,11 @@ function dibujarTicket(c) {
   filas.forEach(f => {
     const tot = f.length * CW + (f.length - 1) * GAP; let x = (W - tot) / 2;
     f.forEach(v => {
-      const bg = ctx.createLinearGradient(0, y, 0, y + CH); bg.addColorStop(0, '#ee2a44'); bg.addColorStop(1, '#a30c20');
+      const ex = (c.extras || []).indexOf(v) >= 0;
+      const bg = ctx.createLinearGradient(0, y, 0, y + CH); bg.addColorStop(0, ex ? '#FFE680' : '#ee2a44'); bg.addColorStop(1, ex ? '#F5B800' : '#a30c20');
       ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(x, y, CW, CH, 10); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.roundRect(x + 3, y + 3, CW - 6, CH / 2 - 3, 8); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = '700 ' + CFN + 'px ' + MONO; ctx.textBaseline = 'middle'; ctx.fillText(n4(v), x + CW / 2, y + CH / 2 + 2); ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = ex ? '#3b0a52' : '#fff'; ctx.font = '700 ' + CFN + 'px ' + MONO; ctx.textBaseline = 'middle'; ctx.fillText(n4(v), x + CW / 2, y + CH / 2 + 2); ctx.textBaseline = 'alphabetic';
       x += CW + GAP;
     });
     y += CH + VGAP;
